@@ -10,6 +10,10 @@ CONTAINS_OP_OPCODE = 118
 JUMP_IF_NOT_EXC_MATCH_OPCODE = 121
 #
 LOAD_GLOBAL_OPCODE = 116
+COMPARE_OP_OPCODE = 107
+
+COMPARE_OP_IS_OPERATOR = 8
+COMPARE_OP_IN_OPERATOR = 6
 
 
 def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
@@ -45,11 +49,18 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
             assert assertion_error_name_idx <= 255
             new_code.append(LOAD_GLOBAL_OPCODE)
             new_code.append(assertion_error_name_idx)
-
         # Transform IS_OP, CONTAINS_OP and JUMP_IF_NOT_EXC_MATCH back to
         # COMPARE_OP.
-    code.co_code = bytes(new_code)
-    
+        if opcode == IS_OP_OPCODE:
+            # Convert to `COMPARE_OP  8 (is)` or `COMPARE_OP  9 (is not)`
+            new_code.append(COMPARE_OP_OPCODE)
+            new_code.append(COMPARE_OP_IS_OPERATOR + bool(oparg))
+        if opcode == CONTAINS_OP_OPCODE:
+            # Convert to `COMPARE_OP  6 (in)` or `COMPARE_OP  7 (not in)`
+            new_code.append(COMPARE_OP_OPCODE)
+            new_code.append(COMPARE_OP_IN_OPERATOR + bool(oparg))
+
+    code.co_code = bytes(new_code)    
     return code.freeze()
 
 
