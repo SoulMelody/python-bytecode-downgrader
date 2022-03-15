@@ -1,5 +1,15 @@
 import xdis
+import typing
 from copy import deepcopy
+
+
+# Python 3.9 specific opcodes
+LOAD_ASSERTION_ERROR_OPCODE = 74
+IS_OP_OPCODE = 117
+CONTAINS_OP_OPCODE = 118
+JUMP_IF_NOT_EXC_MATCH_OPCODE = 121
+#
+LOAD_GLOBAL_OPCODE = 116
 
 
 def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
@@ -18,5 +28,39 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
         if not isinstance(const, xdis.Code38):
             continue
         code.co_consts[i] = downgrade_py39_code_to_py38(const)
+
+    new_code = []
+    for i in range(0, len(code.co_code), 2):
+        opcode, oparg = code.co_code[i], code.co_code[i + 1]
+
+        if opcode not in (LOAD_ASSERTION_ERROR_OPCODE, IS_OP_OPCODE, CONTAINS_OP_OPCODE, JUMP_IF_NOT_EXC_MATCH_OPCODE):
+            new_code.append(opcode)
+            new_code.append(oparg)
+            continue
+
+        # Transform LOAD_ASSERTION_ERROR back to
+        # LOAD_GLOBAL   n ('AssertionError')
+        if opcode == LOAD_ASSERTION_ERROR_OPCODE:
+            assertion_error_name_idx = get_or_add_name('AssertionError', code)
+            assert assertion_error_name_idx <= 255
+            new_code.append(LOAD_GLOBAL_OPCODE)
+            new_code.append(assertion_error_name_idx)
+
+        # Transform IS_OP, CONTAINS_OP and JUMP_IF_NOT_EXC_MATCH back to
+        # COMPARE_OP.
+    code.co_code = bytes(new_code)
     
-    return code
+    return code.freeze()
+
+
+def get_or_add_name(name: str, code: xdis.Code38) -> int:
+    """Retrieves the index of `name` in the `names` list. Or if it doesn't
+    exist, appends it to the end of the names and returns that index.
+    """
+    try:
+        return code.co_names.index(name)
+    except ValueError:
+        existing_names = list(code.co_names)
+        existing_names.append(name)
+        code.co_names = tuple(existing_names)
+        return len(code.co_names) - 1
