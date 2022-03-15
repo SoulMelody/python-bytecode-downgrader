@@ -10,6 +10,26 @@ import typing
 import types
 
 
+# ===== HACK =====
+# Okay this horrible hack is a monkey patch for xdis's version independent
+# marshaller until I can upstream a fix. Currently it keeps around a
+# a dictionary of (type: dump_function). It adds in a mapping for
+# `Code3: dump_code3`. However, since we mostly deal with Code38 objects here,
+# this lookup fails. In this case they have a:
+#
+#     if isinstance(x, Code2):
+#         self.dispatch[Code2](self, x)
+#         return
+#     elif isinstance(x, Code3):
+#         self.dispatch[Code3](self, x)
+#         return
+#
+# except Code3 inherits from Code2, so the Code2 dispatcher always gets
+# triggered.
+xdis_marsh._Marshaller.dispatch[xdis.Code38] = xdis_marsh._Marshaller.dump_code3
+# ================
+
+
 def transform_code_to_portable(code: typing.Union[CodeBase, types.CodeType]) -> xdis.Code38:
     """
     xdis has a feature whereby code objects from the same interpreter as the one

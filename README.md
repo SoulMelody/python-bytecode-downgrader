@@ -1,5 +1,7 @@
 # Python Bytecode Downgrader
 
+![CI](https://github.com/ammaraskar/python-bytecode-downgrader/actions/workflows/ci.yml/badge.svg)
+
 Downgrades Python bytecode from 3.x so that it can be run on a 3.x interpreter.
 
 ## Testing
