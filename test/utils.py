@@ -13,7 +13,7 @@ TEST_FILES_FOLDER = TEST_FOLDER / 'test_files'
 # Decorator to mark tests that need a python 3.8 executable.
 try:
     subprocess.check_output(['python3.8', '--version'])
-    PY_38_COMMAND = ['pyton3.8']
+    PY_38_COMMAND = ['python3.8']
 except OSError:
     PY_38_COMMAND = None
 
