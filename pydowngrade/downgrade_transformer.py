@@ -21,6 +21,7 @@ BUILD_LIST_OPCODE = 103
 NOP_OPCODE = 9
 RETURN_VALUE_OPCODE = 83
 POP_EXCEPT_OPCODE = 89
+FOR_ITER_OPCODE = 93
 LOAD_CONST_OPCODE = 100
 LOAD_NAME_OPCODE = 101
 JUMP_FORWARD_OPCODE = 110
@@ -145,6 +146,7 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
             POP_JUMP_IF_TRUE_OPCODE,
             POP_JUMP_IF_FALSE_OPCODE,
             JUMP_ABSOLUTE_OPCODE,
+            FOR_ITER_OPCODE,
         ):
             final_code.append(opcode)
             target = target_base + oparg
