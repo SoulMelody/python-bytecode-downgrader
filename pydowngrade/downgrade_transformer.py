@@ -28,6 +28,7 @@ JUMP_ABSOLUTE_OPCODE = 113
 POP_JUMP_IF_FALSE_OPCODE = 114
 POP_JUMP_IF_TRUE_OPCODE = 115
 CALL_FUNCTION_OPCODE = 131
+EXTENDED_ARG_OPCODE = 144
 
 
 def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
@@ -81,8 +82,7 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
             new_code[-1] = list_repr_idx
             new_code.append(CALL_FUNCTION_OPCODE)
             new_code.append(1)
-        # Transform IS_OP, CONTAINS_OP and JUMP_IF_NOT_EXC_MATCH back to
-        # COMPARE_OP.
+        # Transform IS_OP, CONTAINS_OP back to COMPARE_OP.
         elif opcode == IS_OP_OPCODE:
             # Convert to `COMPARE_OP  8 (is)` or `COMPARE_OP  9 (is not)`
             new_code.append(COMPARE_OP_OPCODE)
@@ -92,7 +92,7 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
             new_code.append(COMPARE_OP_OPCODE)
             new_code.append(COMPARE_OP_IN_OPERATOR + bool(oparg))
         elif opcode == RERAISE_OPCODE:
-            if new_code[-6] == POP_EXCEPT_OPCODE and oparg == 0:
+            if len(new_code) >= 6 and new_code[-6] == POP_EXCEPT_OPCODE and oparg == 0:
                 inc_offset += 2
                 abstract_offsets.append((i + inc_offset, inc_offset))
                 new_code = (
@@ -100,7 +100,9 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
                     + [JUMP_FORWARD_OPCODE, 2, END_FINALLY_OPCODE, oparg]
                     + new_code[-4:]
                 )
-            elif new_code[-8] == POP_EXCEPT_OPCODE and oparg == 0:
+            elif (
+                len(new_code) >= 8 and new_code[-8] == POP_EXCEPT_OPCODE and oparg == 0
+            ):
                 inc_offset += 2
                 abstract_offsets.append((i + inc_offset, inc_offset))
                 new_code = (
@@ -108,7 +110,7 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
                     + [JUMP_FORWARD_OPCODE, 2, END_FINALLY_OPCODE, oparg]
                     + new_code[-6:]
                 )
-            elif (
+            elif len(new_code) >= 4 and (
                 new_code[-4] == POP_EXCEPT_OPCODE
                 and new_code[-2] == JUMP_FORWARD_OPCODE
                 and new_code[-1] == 2
@@ -120,11 +122,22 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
                     END_FINALLY_OPCODE,
                     oparg,
                 ]
+            elif (
+                len(new_code) >= 4 and new_code[-4] == POP_EXCEPT_OPCODE and oparg == 0
+            ):
+                inc_offset += 2
+                abstract_offsets.append((i + inc_offset, inc_offset))
+                new_code = (
+                    new_code[:-2]
+                    + [JUMP_FORWARD_OPCODE, 2, END_FINALLY_OPCODE, oparg]
+                    + new_code[-2:]
+                )
             else:
                 new_code.append(END_FINALLY_OPCODE)
                 new_code.append(oparg)
 
     final_code = []
+    target_base = 0
     for i in range(0, len(new_code), 2):
         opcode, oparg = new_code[i], new_code[i + 1]
 
@@ -134,21 +147,22 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
             JUMP_ABSOLUTE_OPCODE,
         ):
             final_code.append(opcode)
+            target = target_base + oparg
             add_offset = max(
                 0,
-                bisect.bisect_right(abstract_offsets, (oparg, oparg)) - 1,
+                bisect.bisect_right(abstract_offsets, (target, target)) - 1,
             )
             final_code.append(oparg + abstract_offsets[add_offset][1])
         elif opcode in (JUMP_FORWARD_OPCODE,):
+            target = i + target_base + oparg + 2
             final_code.append(opcode)
             src_offset = max(
                 0,
-                bisect.bisect_right(abstract_offsets, (i, oparg)) - 1,
+                bisect.bisect_right(abstract_offsets, (i, target)) - 1,
             )
-            target = i + oparg + 2
             dst_offset = max(
                 0,
-                bisect.bisect_right(abstract_offsets, (target, oparg)) - 1,
+                bisect.bisect_right(abstract_offsets, (target, target)) - 1,
             )
             if src_offset != dst_offset:
                 final_code.append(
@@ -161,6 +175,11 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
         else:
             final_code.append(opcode)
             final_code.append(oparg)
+
+        if opcode == EXTENDED_ARG_OPCODE:
+            target_base = 256 * 2 ** (oparg - 1)
+        else:
+            target_base = 0
 
     code.co_code = bytes(final_code)
     return code.freeze()
