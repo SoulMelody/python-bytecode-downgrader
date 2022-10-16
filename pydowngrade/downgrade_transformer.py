@@ -1,6 +1,7 @@
-import xdis
 import bisect
 from copy import deepcopy
+
+import xdis
 
 # Python 3.9 specific opcodes
 LOAD_ASSERTION_ERROR_OPCODE = 74
@@ -178,8 +179,26 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
             final_code.append(opcode)
             final_code.append(oparg)
 
+        if final_code[-1] >= 256:
+            if target_base:
+                final_code = final_code[:-3] + [
+                    final_code[-1] // 256 - 1,
+                    final_code[-2],
+                    final_code[-1] % 256,
+                ]
+            else:
+                abstract_offsets = [
+                    (offset if offset < len(final_code) else offset + 2, inc_offset)
+                    for offset, inc_offset in abstract_offsets
+                ]
+                final_code = (
+                    final_code[:-2]
+                    + [EXTENDED_ARG_OPCODE, final_code[-1] // 256 - 1]
+                    + [final_code[-2], final_code[-1] % 256]
+                )
+
         if opcode == EXTENDED_ARG_OPCODE:
-            target_base = 256 * 2 ** (oparg - 1)
+            target_base = 256 * (oparg + 1)
         else:
             target_base = 0
 
