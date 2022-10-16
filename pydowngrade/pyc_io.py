@@ -1,13 +1,13 @@
+import pathlib
+import struct
+import time
+import types
+import typing
+
 import xdis
 from xdis import marsh as xdis_marsh
 from xdis.codetype.base import CodeBase
 from xdis.magics import magics as xdis_magics
-
-import pathlib
-import struct
-import time
-import typing
-import types
 
 
 # ===== HACK =====
@@ -26,6 +26,14 @@ import types
 #
 # except Code3 inherits from Code2, so the Code2 dispatcher always gets
 # triggered.
+def dump_unicode(self, x):
+    self._write("u")
+    s = x.encode()
+    self.w_long(len(s))
+    self._write(s)
+
+
+xdis_marsh._Marshaller.dispatch[str] = dump_unicode
 xdis_marsh._Marshaller.dispatch[xdis.Code38] = xdis_marsh._Marshaller.dump_code3
 # ================
 
