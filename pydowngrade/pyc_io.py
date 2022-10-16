@@ -30,7 +30,9 @@ xdis_marsh._Marshaller.dispatch[xdis.Code38] = xdis_marsh._Marshaller.dump_code3
 # ================
 
 
-def transform_code_to_portable(code: typing.Union[CodeBase, types.CodeType]) -> xdis.Code38:
+def transform_code_to_portable(
+    code: typing.Union[CodeBase, types.CodeType]
+) -> xdis.Code38:
     """
     xdis has a feature whereby code objects from the same interpreter as the one
     running will be loaded as native Python code objects instead of xdis's own
@@ -44,7 +46,7 @@ def transform_code_to_portable(code: typing.Union[CodeBase, types.CodeType]) -> 
     code.co_consts = list(code.co_consts)
     for i, const in enumerate(code.co_consts):
         try:
-            code.co_consts[i] = xdis.codeType2Portable(const)
+            code.co_consts[i] = xdis.codeType2Portable(const, (3, 8, 3))
         except TypeError:
             pass
     return code
@@ -63,7 +65,9 @@ class Py39CompiledFile:
         self.code = transform_code_to_portable(loaded_module[3])
 
 
-def output_py38_pyc_file(code: xdis.Code38, file: typing.BinaryIO, timestamp: typing.Optional[int] = None):
+def output_py38_pyc_file(
+    code: xdis.Code38, file: typing.BinaryIO, timestamp: typing.Optional[int] = None
+):
     """
     Takes the `code` argument representing the module code and writes it in a
     pyc file format in `file`.
@@ -71,7 +75,7 @@ def output_py38_pyc_file(code: xdis.Code38, file: typing.BinaryIO, timestamp: ty
     if timestamp is None:
         timestamp = int(time.time())
 
-    magic_bytes = xdis_magics['3.8.3']
+    magic_bytes = xdis_magics["3.8.3"]
     file.write(magic_bytes)
 
     # 0 means a timestamp based validated pyc (instead of hash based)
