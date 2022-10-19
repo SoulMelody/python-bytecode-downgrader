@@ -53,6 +53,7 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
         code.co_consts[i] = downgrade_py39_code_to_py38(const)
 
     new_code = []
+    target_base = 0
     for i in range(0, len(code.co_code), 2):
         opcode, oparg = code.co_code[i], code.co_code[i + 1]
 
@@ -63,6 +64,12 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
             RERAISE_OPCODE,
             LIST_EXTEND_OPCODE,
         ):
+            if opcode == FOR_ITER_OPCODE and code.co_name == "_startGenerateData":
+                print(i, i + target_base + oparg + 2)
+            if opcode == EXTENDED_ARG_OPCODE:
+                target_base = 256 * oparg + target_base
+            else:
+                target_base = 0
             new_code.append(opcode)
             new_code.append(oparg)
             continue
@@ -147,7 +154,6 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
             POP_JUMP_IF_TRUE_OPCODE,
             POP_JUMP_IF_FALSE_OPCODE,
             JUMP_ABSOLUTE_OPCODE,
-            FOR_ITER_OPCODE,
         ):
             final_code.append(opcode)
             target = target_base + oparg
@@ -156,7 +162,10 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
                 bisect.bisect_right(absolute_offsets, (target, target)) - 1,
             )
             final_code.append(oparg + absolute_offsets[add_offset][1])
-        elif opcode in (JUMP_FORWARD_OPCODE,):
+        elif opcode in (
+            JUMP_FORWARD_OPCODE,
+            FOR_ITER_OPCODE,
+        ):
             target = i + target_base + oparg + 2
             final_code.append(opcode)
             src_offset = max(
