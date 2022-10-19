@@ -198,7 +198,7 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
                 )
 
         if opcode == EXTENDED_ARG_OPCODE:
-            target_base = 256 * (oparg + 1)
+            target_base = 256 * oparg + target_base
         else:
             target_base = 0
 
