@@ -4,33 +4,11 @@ from copy import deepcopy
 import xdis
 
 # Python 3.9 specific opcodes
-LOAD_ASSERTION_ERROR_OPCODE = 74
-IS_OP_OPCODE = 117
-CONTAINS_OP_OPCODE = 118
-RERAISE_OPCODE = 48
-LIST_EXTEND_OPCODE = 162
 SET_UPDATE_OPCODE = 163  # TODO
 JUMP_IF_NOT_EXC_MATCH_OPCODE = 121  # TODO
 
-LOAD_GLOBAL_OPCODE = 116
-COMPARE_OP_OPCODE = 107
 COMPARE_OP_IS_OPERATOR = 8
 COMPARE_OP_IN_OPERATOR = 6
-END_FINALLY_OPCODE = 88
-BUILD_LIST_OPCODE = 103
-
-NOP_OPCODE = 9
-RETURN_VALUE_OPCODE = 83
-POP_EXCEPT_OPCODE = 89
-FOR_ITER_OPCODE = 93
-LOAD_CONST_OPCODE = 100
-LOAD_NAME_OPCODE = 101
-JUMP_FORWARD_OPCODE = 110
-JUMP_ABSOLUTE_OPCODE = 113
-POP_JUMP_IF_FALSE_OPCODE = 114
-POP_JUMP_IF_TRUE_OPCODE = 115
-CALL_FUNCTION_OPCODE = 131
-EXTENDED_ARG_OPCODE = 144
 
 
 def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
@@ -53,96 +31,112 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
         code.co_consts[i] = downgrade_py39_code_to_py38(const)
 
     new_code = []
-    target_base = 0
     for i in range(0, len(code.co_code), 2):
         opcode, oparg = code.co_code[i], code.co_code[i + 1]
 
         if opcode not in (
-            LOAD_ASSERTION_ERROR_OPCODE,
-            IS_OP_OPCODE,
-            CONTAINS_OP_OPCODE,
-            RERAISE_OPCODE,
-            LIST_EXTEND_OPCODE,
+            xdis.opcode_39.LOAD_ASSERTION_ERROR,
+            xdis.opcode_39.IS_OP,
+            xdis.opcode_39.CONTAINS_OP,
+            xdis.opcode_39.RERAISE,
+            xdis.opcode_39.LIST_EXTEND,
         ):
-            if opcode == FOR_ITER_OPCODE and code.co_name == "_startGenerateData":
-                print(i, i + target_base + oparg + 2)
-            if opcode == EXTENDED_ARG_OPCODE:
-                target_base = 256 * oparg + target_base
-            else:
-                target_base = 0
             new_code.append(opcode)
             new_code.append(oparg)
             continue
 
         # Transform LOAD_ASSERTION_ERROR back to
         # LOAD_GLOBAL   n ('AssertionError')
-        if opcode == LOAD_ASSERTION_ERROR_OPCODE:
+        if opcode == xdis.opcode_39.LOAD_ASSERTION_ERROR:
             assertion_error_name_idx = get_or_add_name("AssertionError", code)
             assert assertion_error_name_idx <= 255
-            new_code.append(LOAD_GLOBAL_OPCODE)
+            new_code.append(xdis.opcode_38.LOAD_GLOBAL)
             new_code.append(assertion_error_name_idx)
-        elif opcode == LIST_EXTEND_OPCODE:
+        elif opcode == xdis.opcode_39.LIST_EXTEND:
             list_obj = list(code.co_consts[new_code[-1]])
             eval_idx = get_or_add_name("eval", code)
-            new_code[-4] = LOAD_NAME_OPCODE
+            new_code[-4] = xdis.opcode_38.LOAD_NAME
             new_code[-3] = eval_idx
             list_repr_idx = get_or_add_const(str(list_obj), code)
-            new_code[-2] = LOAD_CONST_OPCODE
+            new_code[-2] = xdis.opcode_38.LOAD_CONST
             new_code[-1] = list_repr_idx
-            new_code.append(CALL_FUNCTION_OPCODE)
+            new_code.append(xdis.opcode_38.CALL_FUNCTION)
             new_code.append(1)
         # Transform IS_OP, CONTAINS_OP back to COMPARE_OP.
-        elif opcode == IS_OP_OPCODE:
+        elif opcode == xdis.opcode_39.IS_OP:
             # Convert to `COMPARE_OP  8 (is)` or `COMPARE_OP  9 (is not)`
-            new_code.append(COMPARE_OP_OPCODE)
+            new_code.append(xdis.opcode_38.COMPARE_OP)
             new_code.append(COMPARE_OP_IS_OPERATOR + bool(oparg))
-        elif opcode == CONTAINS_OP_OPCODE:
+        elif opcode == xdis.opcode_39.CONTAINS_OP:
             # Convert to `COMPARE_OP  6 (in)` or `COMPARE_OP  7 (not in)`
-            new_code.append(COMPARE_OP_OPCODE)
+            new_code.append(xdis.opcode_38.COMPARE_OP)
             new_code.append(COMPARE_OP_IN_OPERATOR + bool(oparg))
-        elif opcode == RERAISE_OPCODE:
-            if len(new_code) >= 6 and new_code[-6] == POP_EXCEPT_OPCODE and oparg == 0:
+        elif opcode == xdis.opcode_39.RERAISE:
+            if (
+                len(new_code) >= 6
+                and new_code[-6] == xdis.opcode_38.POP_EXCEPT
+                and oparg == 0
+            ):
                 inc_offset += 2
                 absolute_offsets.append((i + inc_offset, inc_offset))
                 new_code = (
                     new_code[:-4]
-                    + [JUMP_FORWARD_OPCODE, 2, END_FINALLY_OPCODE, oparg]
+                    + [
+                        xdis.opcode_38.JUMP_FORWARD,
+                        2,
+                        xdis.opcode_38.END_FINALLY,
+                        oparg,
+                    ]
                     + new_code[-4:]
                 )
             elif (
-                len(new_code) >= 8 and new_code[-8] == POP_EXCEPT_OPCODE and oparg == 0
+                len(new_code) >= 8
+                and new_code[-8] == xdis.opcode_38.POP_EXCEPT
+                and oparg == 0
             ):
                 inc_offset += 2
                 absolute_offsets.append((i + inc_offset, inc_offset))
                 new_code = (
                     new_code[:-6]
-                    + [JUMP_FORWARD_OPCODE, 2, END_FINALLY_OPCODE, oparg]
+                    + [
+                        xdis.opcode_38.JUMP_FORWARD,
+                        2,
+                        xdis.opcode_38.END_FINALLY,
+                        oparg,
+                    ]
                     + new_code[-6:]
                 )
             elif len(new_code) >= 4 and (
-                new_code[-4] == POP_EXCEPT_OPCODE
-                and new_code[-2] == JUMP_FORWARD_OPCODE
+                new_code[-4] == xdis.opcode_38.POP_EXCEPT
+                and new_code[-2] == xdis.opcode_38.JUMP_FORWARD
                 and new_code[-1] == 2
                 and oparg == 0
             ):
                 new_code = new_code[:-2] + [
-                    JUMP_FORWARD_OPCODE,
+                    xdis.opcode_38.JUMP_FORWARD,
                     2,
-                    END_FINALLY_OPCODE,
+                    xdis.opcode_38.END_FINALLY,
                     oparg,
                 ]
             elif (
-                len(new_code) >= 4 and new_code[-4] == POP_EXCEPT_OPCODE and oparg == 0
+                len(new_code) >= 4
+                and new_code[-4] == xdis.opcode_38.POP_EXCEPT
+                and oparg == 0
             ):
                 inc_offset += 2
                 absolute_offsets.append((i + inc_offset, inc_offset))
                 new_code = (
                     new_code[:-2]
-                    + [JUMP_FORWARD_OPCODE, 2, END_FINALLY_OPCODE, oparg]
+                    + [
+                        xdis.opcode_38.JUMP_FORWARD,
+                        2,
+                        xdis.opcode_38.END_FINALLY,
+                        oparg,
+                    ]
                     + new_code[-2:]
                 )
             else:
-                new_code.append(END_FINALLY_OPCODE)
+                new_code.append(xdis.opcode_38.END_FINALLY)
                 new_code.append(oparg)
 
     final_code = []
@@ -150,11 +144,7 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
     for i in range(0, len(new_code), 2):
         opcode, oparg = new_code[i], new_code[i + 1]
 
-        if opcode in (
-            POP_JUMP_IF_TRUE_OPCODE,
-            POP_JUMP_IF_FALSE_OPCODE,
-            JUMP_ABSOLUTE_OPCODE,
-        ):
+        if opcode in xdis.opcode_38.JABS_OPS:
             final_code.append(opcode)
             target = target_base + oparg
             add_offset = max(
@@ -162,10 +152,7 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
                 bisect.bisect_right(absolute_offsets, (target, target)) - 1,
             )
             final_code.append(oparg + absolute_offsets[add_offset][1])
-        elif opcode in (
-            JUMP_FORWARD_OPCODE,
-            FOR_ITER_OPCODE,
-        ):
+        elif opcode in xdis.opcode_38.JREL_OPS:
             target = i + target_base + oparg + 2
             final_code.append(opcode)
             src_offset = max(
@@ -202,11 +189,11 @@ def downgrade_py39_code_to_py38(code: xdis.Code38) -> xdis.Code38:
                 ]
                 final_code = (
                     final_code[:-2]
-                    + [EXTENDED_ARG_OPCODE, final_code[-1] // 256 - 1]
+                    + [xdis.opcode_38.EXTENDED_ARG, final_code[-1] // 256 - 1]
                     + [final_code[-2], final_code[-1] % 256]
                 )
 
-        if opcode == EXTENDED_ARG_OPCODE:
+        if opcode == xdis.opcode_38.EXTENDED_ARG:
             target_base = 256 * oparg + target_base
         else:
             target_base = 0
